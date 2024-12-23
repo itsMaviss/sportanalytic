@@ -5,7 +5,7 @@ import seaborn as sns
 from utils.data_generation import generate_player_data, generate_match_data
 from utils.model import train_model
 
-
+# push
 def main():
     st.title("Badminton Analytics Application")
 
