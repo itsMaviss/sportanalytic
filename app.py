@@ -1,67 +1,145 @@
-import os
-import pandas as pd
 import streamlit as st
-from utils.data_generation import generate_synthetic_data
-from utils.model import train_regression_model
-from utils.evaluation import evaluate_model
-import joblib
-
-# Load data
-st.title("Sports Analytics Project - Player Performance Simulation")
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from utils.data_generation import generate_player_data, generate_match_data
+from utils.model import train_model
 
 
-@st.cache_data
-def load_data():
-    # Check if the synthetic data file exists
-    if not os.path.exists('data/synthetic_data.csv'):
-        st.write("Generating synthetic data...")
-        generate_synthetic_data()  # Generate data if file doesn't exist
-    df = pd.read_csv('data/synthetic_data.csv')
-    return df
+def main():
+    st.title("Badminton Analytics Application")
+
+    # Initialize session state variables
+    if "player_data" not in st.session_state:
+        st.session_state.player_data = None
+    if "match_data" not in st.session_state:
+        st.session_state.match_data = None
+    if "eda_fig" not in st.session_state:
+        st.session_state.eda_fig = None
+    if "training_fig" not in st.session_state:
+        st.session_state.training_fig = None
+    if "eval_matrix" not in st.session_state:
+        st.session_state.eval_matrix = None
+    if "conf_matrix" not in st.session_state:
+        st.session_state.conf_matrix = None
+
+    # Step 1: Data Generation
+    st.header("1. Synthetic Data Generation")
+
+    # Display the sliders before the button to allow adjusting values
+    num_players = st.slider("Number of Players", 50, 200, 50)
+    num_matches = st.slider("Number of Matches", 100, 500, 500)
+
+    if st.button("Generate Data"):
+        # Clear the previous data and graphs when generating new data
+        st.session_state.eda_fig = None
+        st.session_state.training_fig = None
+        st.session_state.player_data = None
+        st.session_state.match_data = None
+        st.session_state.eval_matrix = None
+        st.session_state.conf_matrix = None
+
+        # Generate new data and store in session state
+        st.session_state.player_data = generate_player_data(num_players)
+        st.write("### Player Data", st.session_state.player_data)
+
+        st.session_state.match_data = generate_match_data(st.session_state.player_data, num_matches)
+        st.write("### Match Data", st.session_state.match_data)
+
+    # Step 2: Exploratory Data Analysis (EDA)
+    st.header("2. Exploratory Data Analysis")
+    if st.session_state.player_data is not None:
+        if st.button("Perform EDA"):
+            st.subheader("Player Stats Distribution")
+            fig, ax = plt.subplots()
+            sns.boxplot(data=st.session_state.player_data.drop("PlayerID", axis=1), ax=ax)
+            ax.set_title("EDA")
+            st.session_state.eda_fig = fig
+        if st.session_state.eda_fig is not None:
+            st.pyplot(st.session_state.eda_fig)
+    else:
+        st.warning("Please generate data first.")
+
+    st.header("3. Train Model")
+    if st.session_state.player_data is not None:
+        # Step 3: Modeling
+        if st.button("Train Model"):
+            model, accuracy, precision, recall, conf_matrix = train_model(
+                st.session_state.player_data, st.session_state.match_data
+            )
+            # Confusion Matrix Heatmap
+            fig, ax = plt.subplots()
+            sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax,
+                        xticklabels=["Predicted Negative", "Predicted Positive"],
+                        yticklabels=["True Negative", "True Positive"])
+            ax.set_title("Confusion Matrix")
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            st.session_state.conf_matrix = fig
+
+            metrics = ["Accuracy", "Precision", "Recall"]
+            values = [accuracy, precision, recall]
+            fig, ax = plt.subplots()
+            ax.bar(metrics, values, color=['skyblue', 'lightgreen', 'salmon'])
+            ax.set_title("Evaluation Matrix")
+            ax.set_ylim(0, 1)  # Metrics are between 0 and 1
+            for i, v in enumerate(values):
+                ax.text(i, v + 0.02, f"{v:.2f}", ha='center', fontweight='bold')  # Annotate bars
+            st.session_state.eval_matrix = fig
+
+            fig, ax = plt.subplots()
+            feature_importances = model.feature_importances_
+            features = [
+                "P1_Speed", "P1_Stamina", "P1_Agility",
+                "P2_Speed", "P2_Stamina", "P2_Agility"
+            ]
+            ax.bar(features, feature_importances, color='skyblue')
+            ax.set_title("Feature Importance")
+            ax.set_ylabel("Importance")
+            st.session_state.training_fig = fig
+
+        # Only render the feature importance graph if it exists
+        if st.session_state.conf_matrix is not None:
+            st.pyplot(st.session_state.conf_matrix)
+        if st.session_state.eval_matrix is not None:
+            st.pyplot(st.session_state.eval_matrix)
+        if st.session_state.training_fig is not None:
+            st.pyplot(st.session_state.training_fig)
+
+    else:
+        st.warning("Please generate data first.")
+
+    # Step 4: Simulation
+    st.header("4. Simulation")
+    if st.session_state.player_data is not None:
+        # Track the player's selection in session state to persist across rerenders
+        if "selected_player" not in st.session_state:
+            st.session_state.selected_player = None
+        if "show_player_selectbox" not in st.session_state:
+            st.session_state.show_player_selectbox = False  # Keep track of whether the dropdown is visible
+
+        if st.button("Simulate Match"):
+            # Show player selection dropdown after clicking the button
+            st.session_state.show_player_selectbox = True
+
+        if st.session_state.show_player_selectbox:
+            # Show the selectbox once "Simulate Match" is clicked
+            selected_player = st.selectbox(
+                "Select a Player",
+                st.session_state.player_data["PlayerID"],
+                key="player_selectbox"
+            )
+            st.session_state.selected_player = selected_player  # Save the selection in session state
+
+        if st.session_state.selected_player is not None:
+            # Display selected player data once a player has been chosen
+            selected_data = st.session_state.player_data[
+                st.session_state.player_data["PlayerID"] == st.session_state.selected_player
+                ]
+            st.write("Selected Player Data:", selected_data)
+    else:
+        st.warning("Please generate data first.")
 
 
-df = load_data()
-
-# Display the synthetic data (full dataset, scrollable)
-st.subheader("Synthetic Data")
-st.write("Displaying the entire dataset. You can scroll to explore all the rows.")
-st.dataframe(df, height=500)  # Scrollable dataframe with height of 600px
-
-# Check if the model is already trained
-if 'model' not in st.session_state:
-    st.session_state.model = None
-    st.session_state.X_test = None
-    st.session_state.y_test = None
-
-# Train Model
-if st.button("Train Model"):
-    model, X_test, y_test = train_regression_model(df)
-
-    # Save model and test data to session state to avoid retraining every time
-    st.session_state.model = model
-    st.session_state.X_test = X_test
-    st.session_state.y_test = y_test
-    st.write("Model trained successfully!")
-
-    # Evaluate Model
-    mse, r2 = evaluate_model(model, X_test, y_test)
-    st.write(f"Mean Squared Error: {mse}")
-    st.write(f"R-squared: {r2}")
-
-# Ensure the model is loaded
-if st.session_state.model:
-    # Simulate future performance
-    st.subheader("Simulate Player Performance")
-    player_id = st.selectbox("Select Player ID", df['PlayerID'].unique())
-    assists = st.slider("Assists", 0, 15)
-    rebounds = st.slider("Rebounds", 0, 15)
-
-    if st.button("Simulate"):
-        # Create a DataFrame for the input with the same columns as the training data
-        input_data = pd.DataFrame([[assists, rebounds]], columns=['Assists', 'Rebounds'])
-
-        # Make the prediction using the trained model
-        simulated_points = st.session_state.model.predict(input_data)[0]
-
-        st.write(f"Simulated Points for Player {player_id}: {simulated_points:.2f}")
-
+if __name__ == "__main__":
+    main()

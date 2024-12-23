@@ -1,27 +1,29 @@
-import os
 import numpy as np
 import pandas as pd
 
-
-def generate_synthetic_data(num_players=100, num_games=50):
-    # Create the data directory if it doesn't exist
-    if not os.path.exists('data'):
-        os.makedirs('data')
-
-    # Simulate player stats (points, assists, rebounds)
+def generate_player_data(num_players=50):
     np.random.seed(42)
+    data = {
+        "PlayerID": range(1, num_players + 1),
+        "Speed": np.random.normal(6, 1.5, num_players),
+        "Stamina": np.random.normal(7, 1, num_players),
+        "Agility": np.random.normal(5.5, 1.2, num_players),
+        "WinRate": np.random.uniform(30, 90, num_players)
+    }
+    return pd.DataFrame(data)
 
-    player_ids = np.arange(1, num_players + 1)
-    games = np.arange(1, num_games + 1)
-
-    data = []
-    for player in player_ids:
-        for game in games:
-            points = np.random.normal(loc=15, scale=5)  # Mean = 15, SD = 5
-            assists = np.random.normal(loc=5, scale=2)  # Mean = 5, SD = 2
-            rebounds = np.random.normal(loc=8, scale=3)  # Mean = 8, SD = 3
-            data.append([player, game, points, assists, rebounds])
-
-    df = pd.DataFrame(data, columns=['PlayerID', 'Game', 'Points', 'Assists', 'Rebounds'])
-    df.to_csv('data/synthetic_data.csv', index=False)
-    return df
+def generate_match_data(player_data, num_matches=500):
+    matches = []
+    for _ in range(num_matches):
+        player1, player2 = player_data.sample(2).to_dict('records')
+        winner = 1 if player1['WinRate'] > player2['WinRate'] else 0
+        matches.append({
+            "Player1_Speed": player1['Speed'],
+            "Player1_Stamina": player1['Stamina'],
+            "Player1_Agility": player1['Agility'],
+            "Player2_Speed": player2['Speed'],
+            "Player2_Stamina": player2['Stamina'],
+            "Player2_Agility": player2['Agility'],
+            "Outcome": winner
+        })
+    return pd.DataFrame(matches)
